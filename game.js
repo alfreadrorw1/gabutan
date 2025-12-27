@@ -1,13 +1,14 @@
 // ==================== FIREBASE CONFIGURATION ====================
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-    apiKey: "AIzaSyAvgycWXMi3vr_Wtl0DNo--ThZP7PlPc_A",
-    authDomain: "ttc-online-ddfca.firebaseapp.com",
-    databaseURL: "https://ttc-online-ddfca-default-rtdb.firebaseio.com",
-    projectId: "ttc-online-ddfca",
-    storageBucket: "ttc-online-ddfca.firebasestorage.app",
-    messagingSenderId: "955067485290",
-    appId: "1:955067485290:web:a483da2db01195cef38e13",
-    measurementId: "G-3K6VP0LC5M"
+  apiKey: "AIzaSyBvr6owbrZS_9ltSIk_FJQ2XVva5fQjyr0",
+  authDomain: "gabutan-alfread.firebaseapp.com",
+  databaseURL: "https://gabutan-alfread-default-rtdb.firebaseio.com",
+  projectId: "gabutan-alfread",
+  storageBucket: "gabutan-alfread.firebasestorage.app",
+  messagingSenderId: "626320232424",
+  appId: "1:626320232424:web:7e292f036d8090a6b41e5d",
+  measurementId: "G-P8FNLHHYX9"
 };
 
 // ==================== GAME CONSTANTS ====================
