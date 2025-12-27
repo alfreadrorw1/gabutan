@@ -3,175 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game Sambung Kata Multiplayer</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/alfreadrorw1/gabutan@main/styles.css">
+    <title>Word Duel - Game Multiplayer 1vs1</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/alfreadrorw1/gabutan@main/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
-        <!-- Lobby Screen -->
-        <div id="lobby" class="screen active">
-            <h1><i class="fas fa-gamepad"></i> Game Sambung Kata</h1>
-            <div class="form-group">
-                <input type="text" id="playerName" placeholder="Masukkan nama kamu" maxlength="20">
-            </div>
-            
-            <div class="button-group">
-                <button id="createRoomBtn" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> Buat Room Baru
-                </button>
-                <button id="joinRoomBtn" class="btn btn-secondary">
-                    <i class="fas fa-sign-in-alt"></i> Join Room
-                </button>
-            </div>
-            
-            <div id="roomSection" class="hidden">
+        <!-- Layar Login -->
+        <div id="login-screen" class="screen active">
+            <div class="card">
+                <h1><i class="fas fa-gamepad"></i> WORD DUEL</h1>
+                <p class="subtitle">Game Multiplayer 1 vs 1 dengan Voice Chat</p>
+                
                 <div class="form-group">
-                    <input type="text" id="roomId" placeholder="Masukkan kode room" maxlength="6">
-                    <button id="confirmJoinBtn" class="btn btn-success">
-                        <i class="fas fa-play"></i> Mulai Main
-                    </button>
+                    <label for="username-input">Pilih Username:</label>
+                    <input type="text" id="username-input" placeholder="Masukkan username unik" maxlength="20">
+                    <div id="username-error" class="error-message"></div>
                 </div>
-                <div class="room-info">
-                    <p>Kode Room: <span id="displayRoomId">-</span></p>
-                    <button id="copyRoomIdBtn" class="btn btn-small">
-                        <i class="fas fa-copy"></i> Copy Kode
-                    </button>
-                </div>
-            </div>
-            
-            <div id="waitingSection" class="hidden">
-                <div class="loading">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <p>Menunggu pemain kedua...</p>
-                    <p class="room-code">Kode Room: <strong id="waitingRoomId"></strong></p>
+                
+                <button id="login-btn" class="btn-primary">
+                    <i class="fas fa-sign-in-alt"></i> Masuk ke Game
+                </button>
+                
+                <div class="info-box">
+                    <h3><i class="fas fa-info-circle"></i> Cara Bermain:</h3>
+                    <ol>
+                        <li>Masukkan username unik</li>
+                        <li>Cari pemain online di daftar</li>
+                        <li>Kirim invite ke lawan</li>
+                        <li>Mainkan game sambung kata</li>
+                        <li>Gunakan voice chat untuk komunikasi</li>
+                    </ol>
                 </div>
             </div>
         </div>
-
-        <!-- Game Screen -->
-        <div id="game" class="screen">
-            <div class="game-header">
-                <h2><i class="fas fa-brain"></i> Sambung Kata</h2>
-                <div class="room-info-header">
-                    <span>Room: <strong id="currentRoomId"></strong></span>
-                    <button id="leaveGameBtn" class="btn btn-small btn-danger">
+        
+        <!-- Lobby / Daftar Pemain Online -->
+        <div id="lobby-screen" class="screen">
+            <div class="header">
+                <h2><i class="fas fa-users"></i> Lobby Pemain</h2>
+                <div class="user-info">
+                    <span id="current-user"></span>
+                    <button id="logout-btn" class="btn-small">
                         <i class="fas fa-sign-out-alt"></i> Keluar
                     </button>
                 </div>
             </div>
             
-            <div class="players-container">
-                <div class="player-card" id="player1Card">
-                    <div class="player-header">
-                        <i class="fas fa-user"></i>
-                        <h3 id="player1Name">Pemain 1</h3>
-                    </div>
-                    <div class="player-status">
-                        <span class="status-indicator" id="player1Status"></span>
-                        <span class="turn-indicator hidden" id="player1Turn">
-                            <i class="fas fa-clock"></i> Giliran
-                        </span>
+            <div class="card">
+                <h3><i class="fas fa-user-clock"></i> Pemain Online (<span id="online-count">0</span>)</h3>
+                <div id="online-players-list" class="players-list">
+                    <!-- Daftar pemain online akan muncul di sini -->
+                    <div class="empty-state">
+                        <i class="fas fa-user-slash"></i>
+                        <p>Tidak ada pemain online selain Anda</p>
                     </div>
                 </div>
                 
-                <div class="vs-circle">VS</div>
-                
-                <div class="player-card" id="player2Card">
-                    <div class="player-header">
-                        <i class="fas fa-user"></i>
-                        <h3 id="player2Name">Pemain 2</h3>
-                    </div>
-                    <div class="player-status">
-                        <span class="status-indicator" id="player2Status"></span>
-                        <span class="turn-indicator hidden" id="player2Turn">
-                            <i class="fas fa-clock"></i> Giliran
-                        </span>
+                <div class="notification-area">
+                    <h3><i class="fas fa-bell"></i> Notifikasi Invite</h3>
+                    <div id="invite-notifications">
+                        <!-- Notifikasi invite akan muncul di sini -->
                     </div>
                 </div>
-            </div>
-            
-            <div class="game-board">
-                <div class="word-chain">
-                    <h3>Rantai Kata:</h3>
-                    <div id="wordChain" class="chain-container">
-                        <!-- Kata-kata akan muncul di sini -->
-                    </div>
-                </div>
-                
-                <div class="game-controls">
-                    <div class="timer-container">
-                        <div class="timer-circle">
-                            <svg width="100" height="100">
-                                <circle cx="50" cy="50" r="45" class="timer-bg"></circle>
-                                <circle cx="50" cy="50" r="45" class="timer-progress" id="timerProgress"></circle>
-                            </svg>
-                            <span id="timerCount">10</span>
-                        </div>
-                    </div>
-                    
-                    <div class="input-section">
-                        <input type="text" id="wordInput" placeholder="Masukkan kata..." disabled>
-                        <button id="submitWordBtn" class="btn btn-primary" disabled>
-                            <i class="fas fa-paper-plane"></i> Submit
-                        </button>
-                    </div>
-                    
-                    <div class="game-info">
-                        <p>Huruf terakhir: <span id="lastLetter" class="highlight">-</span></p>
-                        <p>Jumlah kata: <span id="wordCount">0</span></p>
-                    </div>
-                </div>
-                
-                <div class="voice-controls">
-                    <h3><i class="fas fa-microphone"></i> Voice Chat</h3>
-                    <div class="voice-buttons">
-                        <button id="startVoiceBtn" class="btn btn-voice">
-                            <i class="fas fa-phone"></i> Start Voice
-                        </button>
-                        <button id="endVoiceBtn" class="btn btn-voice btn-danger hidden">
-                            <i class="fas fa-phone-slash"></i> End Voice
-                        </button>
-                        <div class="voice-status">
-                            <span id="voiceStatus">Voice chat tidak aktif</span>
-                        </div>
-                    </div>
-                    <div class="audio-container">
-                        <audio id="remoteAudio" autoplay></audio>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="notifications">
-                <div id="notification" class="notification hidden"></div>
             </div>
         </div>
-
-        <!-- Result Screen -->
-        <div id="result" class="screen hidden">
-            <div class="result-card">
-                <i class="fas fa-trophy result-icon"></i>
-                <h2 id="resultTitle">Game Selesai</h2>
-                <p id="resultMessage">-</p>
-                <div class="result-stats">
-                    <p>Total kata: <span id="finalWordCount">0</span></p>
-                    <p>Durasi: <span id="gameDuration">0</span> detik</p>
+        
+        <!-- Layar Game -->
+        <div id="game-screen" class="screen">
+            <div class="game-header">
+                <h2><i class="fas fa-swords"></i> WORD DUEL</h2>
+                <div class="game-info">
+                    <div class="player-tag">
+                        <span id="player-you">Anda</span> vs <span id="player-opponent">Lawan</span>
+                    </div>
+                    <div class="session-info">
+                        Session: <span id="session-id"></span>
+                    </div>
                 </div>
-                <button id="playAgainBtn" class="btn btn-primary">
-                    <i class="fas fa-redo"></i> Main Lagi
-                </button>
-                <button id="backToLobbyBtn" class="btn btn-secondary">
-                    <i class="fas fa-home"></i> Kembali ke Lobby
+            </div>
+            
+            <div class="game-container">
+                <!-- Panel Voice Chat -->
+                <div class="voice-panel card">
+                    <h3><i class="fas fa-microphone"></i> Voice Chat</h3>
+                    <div class="voice-controls">
+                        <button id="mute-btn" class="btn-secondary">
+                            <i class="fas fa-microphone"></i> Mute
+                        </button>
+                        <button id="hangup-btn" class="btn-danger">
+                            <i class="fas fa-phone-slash"></i> Tutup Koneksi
+                        </button>
+                    </div>
+                    <div class="voice-status">
+                        <span id="voice-status">Menghubungkan...</span>
+                    </div>
+                </div>
+                
+                <!-- Area Game Utama -->
+                <div class="game-area card">
+                    <div class="game-state">
+                        <div class="turn-indicator">
+                            <span id="turn-indicator">Memulai game...</span>
+                        </div>
+                        <div class="score-board">
+                            <div class="score">
+                                <span class="score-label">Skor Anda:</span>
+                                <span id="your-score" class="score-value">0</span>
+                            </div>
+                            <div class="score">
+                                <span class="score-label">Skor Lawan:</span>
+                                <span id="opponent-score" class="score-value">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="word-game">
+                        <div class="current-word">
+                            <h4>Kata Saat Ini:</h4>
+                            <div id="current-word" class="word-display">-</div>
+                        </div>
+                        
+                        <div class="game-rules">
+                            <h4><i class="fas fa-book"></i> Aturan Game:</h4>
+                            <p>Sambung kata: Masukkan kata yang dimulai dengan huruf terakhir kata sebelumnya.</p>
+                            <p>Contoh: "API" → "IKAN" → "NYALA"</p>
+                        </div>
+                        
+                        <div class="input-area">
+                            <input type="text" id="word-input" placeholder="Masukkan kata Anda..." maxlength="20">
+                            <button id="submit-word" class="btn-primary">
+                                <i class="fas fa-paper-plane"></i> Kirim Kata
+                            </button>
+                        </div>
+                        
+                        <div class="timer">
+                            <div class="timer-bar">
+                                <div id="timer-progress" class="timer-progress"></div>
+                            </div>
+                            <span id="timer-text">30 detik</span>
+                        </div>
+                    </div>
+                    
+                    <div class="game-log">
+                        <h4><i class="fas fa-history"></i> Riwayat Permainan:</h4>
+                        <div id="game-log" class="log-content">
+                            <!-- Riwayat permainan akan muncul di sini -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="game-actions">
+                <button id="leave-game-btn" class="btn-danger">
+                    <i class="fas fa-door-open"></i> Keluar dari Game
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/alfreadrorw1/gabutan@main/firebase.js"></script>
+    <!-- Firebase dan WebRTC Libraries -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    
+    <!-- File JavaScript -->
+    <script src="https://cdn.jsdelivr.net/gh/alfreadrorw1/gabutan@main/firebase-config.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/alfreadrorw1/gabutan@main/game.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/alfreadrorw1/gabutan@main/webrtc.js"></script>
 </body>
 </html>
