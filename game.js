@@ -1,4 +1,4 @@
-
+alert("JS MASUK");
 document.addEventListener("DOMContentLoaded", () => {
   console.log("GAME JS AKTIF");
 
