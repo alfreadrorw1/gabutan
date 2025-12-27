@@ -1,789 +1,846 @@
-// Firebase Configuration
+// ==================== FIREBASE CONFIGURATION ====================
 const firebaseConfig = {
-    apiKey: "AIzaSyBvr6owbrZS_9ltSIk_FJQ2XVva5fQjyr0",
-    authDomain: "gabutan-alfread.firebaseapp.com",
-    databaseURL: "https://gabutan-alfread-default-rtdb.firebaseio.com",
-    projectId: "gabutan-alfread",
-    storageBucket: "gabutan-alfread.firebasestorage.app",
-    messagingSenderId: "626320232424",
-    appId: "1:626320232424:web:7e292f036d8090a6b41e5d",
-    measurementId: "G-P8FNLHHYX9"
+    apiKey: "AIzaSyAvgycWXMi3vr_Wtl0DNo--ThZP7PlPc_A",
+    authDomain: "ttc-online-ddfca.firebaseapp.com",
+    databaseURL: "https://ttc-online-ddfca-default-rtdb.firebaseio.com",
+    projectId: "ttc-online-ddfca",
+    storageBucket: "ttc-online-ddfca.firebasestorage.app",
+    messagingSenderId: "955067485290",
+    appId: "1:955067485290:web:a483da2db01195cef38e13",
+    measurementId: "G-3K6VP0LC5M"
 };
 
-// Initialize Firebase
-const app = firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+// ==================== GAME CONSTANTS ====================
+const GAME_CONFIG = {
+    TURN_TIME: 15, // detik
+    MAX_PLAYERS: 2,
+    WORD_LIST: [
+        "sambung", "game", "multiplayer", "online", "real", "time",
+        "kata", "huruf", "awal", "akhir", "giliran", "pemenang",
+        "permainan", "seru", "menarik", "tantangan", "strategi",
+        "kreatif", "cepat", "tepat", "benar", "salah", "menang",
+        "kalah", "seri", "poin", "score", "timer", "waktu",
+        "start", "finish", "round", "match", "player", "turn"
+    ]
+};
 
-// Game State Variables
-let currentPlayer = {
+// ==================== GAME STATE ====================
+let gameState = {
+    currentPlayer: null,
+    currentWord: null,
+    usedWords: [],
+    players: {},
+    gameStatus: 'waiting', // waiting, playing, finished
+    winner: null,
+    startTime: null,
+    turnStartTime: null
+};
+
+let localPlayer = {
     id: null,
     name: '',
-    isCreator: false,
-    score: 0,
-    roomCode: ''
+    isHost: false,
+    playerNumber: null
 };
 
-let gameState = {
-    currentScreen: 'lobby',
-    currentRoom: null,
-    questions: [],
-    currentQuestionIndex: 0,
-    timer: 30,
-    timerInterval: null,
-    hasAnswered: false
+let firebase = null;
+let database = null;
+let roomRef = null;
+let gameRef = null;
+let timerInterval = null;
+let turnTimer = null;
+
+// ==================== DOM ELEMENTS ====================
+const elements = {
+    // Screens
+    loadingScreen: document.getElementById('loadingScreen'),
+    lobbyScreen: document.getElementById('lobbyScreen'),
+    gameScreen: document.getElementById('gameScreen'),
+    gameOverScreen: document.getElementById('gameOverScreen'),
+    
+    // Lobby
+    playerName: document.getElementById('playerName'),
+    roomCode: document.getElementById('roomCode'),
+    createRoomBtn: document.getElementById('createRoomBtn'),
+    joinRoomBtn: document.getElementById('joinRoomBtn'),
+    roomJoinSection: document.getElementById('roomJoinSection'),
+    confirmJoinBtn: document.getElementById('confirmJoinBtn'),
+    activeRoomsList: document.getElementById('activeRoomsList'),
+    
+    // Game
+    roomName: document.getElementById('roomName'),
+    currentRoomCode: document.getElementById('currentRoomCode'),
+    turnIndicator: document.getElementById('turnIndicator'),
+    leaveRoomBtn: document.getElementById('leaveRoomBtn'),
+    
+    // Players
+    player1Card: document.getElementById('player1Card'),
+    player2Card: document.getElementById('player2Card'),
+    player1Name: document.getElementById('player1Name'),
+    player2Name: document.getElementById('player2Name'),
+    player1Status: document.getElementById('player1Status'),
+    player2Status: document.getElementById('player2Status'),
+    
+    // Game Board
+    currentWord: document.getElementById('currentWord'),
+    lastLetter: document.getElementById('lastLetter'),
+    wordInput: document.getElementById('wordInput'),
+    submitWordBtn: document.getElementById('submitWordBtn'),
+    timer: document.getElementById('timer'),
+    timerFill: document.getElementById('timerFill'),
+    timerText: document.getElementById('timerText'),
+    timerLabel: document.getElementById('timerLabel'),
+    usedWordsList: document.getElementById('usedWordsList'),
+    
+    // Game Over
+    resultIcon: document.getElementById('resultIcon'),
+    resultTitle: document.getElementById('resultTitle'),
+    resultMessage: document.getElementById('resultMessage'),
+    totalWords: document.getElementById('totalWords'),
+    gameDuration: document.getElementById('gameDuration'),
+    winnerName: document.getElementById('winnerName'),
+    finalWordsList: document.getElementById('finalWordsList'),
+    playAgainBtn: document.getElementById('playAgainBtn'),
+    newRoomBtn: document.getElementById('newRoomBtn'),
+    
+    // Controls
+    rematchBtn: document.getElementById('rematchBtn'),
+    copyRoomBtn: document.getElementById('copyRoomBtn'),
+    
+    // Notification
+    notification: document.getElementById('notification')
 };
 
-// DOM Elements
-const screens = {
-    lobby: document.getElementById('lobbyScreen'),
-    waiting: document.getElementById('waitingScreen'),
-    game: document.getElementById('gameScreen'),
-    result: document.getElementById('resultScreen')
-};
-
-// Initialize Game
-function initGame() {
-    // Set up input event listeners
-    document.getElementById('playerName').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') showRoomType('create');
-    });
-    
-    // Generate player ID
-    currentPlayer.id = generatePlayerId();
-    
-    // Load global player count
-    updateGlobalPlayerCount();
-    
-    // Set up firebase listeners
-    setupFirebaseListeners();
-    
-    // Show lobby screen
-    showScreen('lobby');
+// ==================== FIREBASE INITIALIZATION ====================
+function initializeFirebase() {
+    try {
+        firebase = window.firebase;
+        firebase.initializeApp(firebaseConfig);
+        database = firebase.database();
+        console.log('Firebase initialized successfully');
+        hideLoadingScreen();
+    } catch (error) {
+        console.error('Firebase initialization failed:', error);
+        showNotification('Gagal menghubungkan ke server. Coba refresh halaman.', 'error');
+    }
 }
 
-// Generate unique player ID
-function generatePlayerId() {
-    return 'player_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+function hideLoadingScreen() {
+    elements.loadingScreen.style.display = 'none';
+    elements.lobbyScreen.style.display = 'block';
 }
 
-// Generate random room code
+// ==================== GAME FUNCTIONS ====================
 function generateRoomCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
     for (let i = 0; i < 6; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    document.getElementById('roomCodeCreate').value = code;
     return code;
 }
 
-// Show room creation/join section
-function showRoomType(type) {
-    const playerName = document.getElementById('playerName').value.trim();
-    if (!playerName) {
-        showToast('Masukkan nama pemain terlebih dahulu!');
-        document.getElementById('playerName').focus();
-        return;
-    }
-    
-    currentPlayer.name = playerName;
-    
-    document.getElementById('roomCreateSection').classList.toggle('hidden', type !== 'create');
-    document.getElementById('roomJoinSection').classList.toggle('hidden', type !== 'join');
-    
-    if (type === 'create') {
-        if (!document.getElementById('roomCodeCreate').value) {
-            generateRoomCode();
-        }
-    }
+function getRandomWord() {
+    const words = GAME_CONFIG.WORD_LIST;
+    return words[Math.floor(Math.random() * words.length)];
 }
 
-// Create new room
-function createRoom() {
-    let roomCode = document.getElementById('roomCodeCreate').value.trim().toUpperCase();
-    const playerName = document.getElementById('playerName').value.trim();
+function getLastLetter(word) {
+    // Handle kata dengan huruf terakhir yang diulang (seperti "kassa" -> ambil "s")
+    word = word.toLowerCase().trim();
+    // Remove trailing non-alphabet characters
+    word = word.replace(/[^a-z]+$/, '');
+    return word.charAt(word.length - 1);
+}
+
+function isValidWord(newWord, lastLetter) {
+    newWord = newWord.toLowerCase().trim();
     
-    if (!roomCode) {
-        roomCode = generateRoomCode();
+    // Cek panjang kata
+    if (newWord.length < 3) {
+        return false;
     }
+    
+    // Cek huruf pertama
+    if (newWord.charAt(0) !== lastLetter.toLowerCase()) {
+        return false;
+    }
+    
+    // Cek apakah kata sudah dipakai
+    if (gameState.usedWords.some(word => word.toLowerCase() === newWord)) {
+        return false;
+    }
+    
+    // Cek apakah kata valid (opsional: bisa ditambahkan dictionary)
+    return true;
+}
+
+// ==================== ROOM MANAGEMENT ====================
+async function createRoom() {
+    const playerName = elements.playerName.value.trim();
     
     if (!playerName) {
-        showToast('Masukkan nama pemain terlebih dahulu!');
+        showNotification('Masukkan nama kamu dulu!', 'warning');
         return;
     }
     
-    if (roomCode.length !== 6) {
-        showToast('Kode room harus 6 karakter!');
-        return;
-    }
+    const roomCode = generateRoomCode();
+    localPlayer.id = 'player_' + Date.now() + Math.random().toString(36).substr(2, 9);
+    localPlayer.name = playerName;
+    localPlayer.isHost = true;
+    localPlayer.playerNumber = 1;
     
-    // Check if room already exists
-    const roomRef = database.ref('rooms/' + roomCode);
-    
-    roomRef.once('value').then((snapshot) => {
-        if (snapshot.exists()) {
-            showToast('Kode room sudah digunakan!');
-            return;
-        }
+    try {
+        roomRef = database.ref(`rooms/${roomCode}`);
+        gameRef = database.ref(`rooms/${roomCode}/game`);
         
         // Create room
-        const roomData = {
+        await roomRef.set({
             code: roomCode,
-            creator: currentPlayer.id,
+            name: `${playerName}'s Room`,
             status: 'waiting',
-            createdAt: firebase.database.ServerValue.TIMESTAMP,
-            players: {},
-            questions: getDefaultQuestions()
-        };
-        
-        // Add creator as first player
-        roomData.players[currentPlayer.id] = {
-            name: playerName,
-            score: 0,
-            isCreator: true,
-            joinedAt: firebase.database.ServerValue.TIMESTAMP
-        };
-        
-        roomRef.set(roomData).then(() => {
-            currentPlayer.roomCode = roomCode;
-            currentPlayer.isCreator = true;
-            joinRoomSuccess(roomCode);
+            host: localPlayer.id,
+            maxPlayers: GAME_CONFIG.MAX_PLAYERS,
+            createdAt: firebase.database.ServerValue.TIMESTAMP
         });
-    });
+        
+        // Add player to room
+        await roomRef.child('players').child(localPlayer.id).set({
+            name: playerName,
+            playerNumber: 1,
+            isHost: true,
+            joinedAt: firebase.database.ServerValue.TIMESTAMP
+        });
+        
+        // Initialize game
+        const initialWord = getRandomWord();
+        await gameRef.set({
+            currentPlayer: localPlayer.id,
+            currentWord: initialWord,
+            usedWords: [initialWord],
+            players: {
+                [localPlayer.id]: {
+                    name: playerName,
+                    playerNumber: 1,
+                    score: 0
+                }
+            },
+            status: 'waiting',
+            startTime: null,
+            turnStartTime: null
+        });
+        
+        // Listen for changes
+        setupGameListeners();
+        
+        // Show game screen
+        showGameScreen(roomCode);
+        showNotification(`Room ${roomCode} berhasil dibuat!`, 'success');
+        
+    } catch (error) {
+        console.error('Error creating room:', error);
+        showNotification('Gagal membuat room. Coba lagi.', 'error');
+    }
 }
 
-// Join existing room
-function joinRoom() {
-    const roomCode = document.getElementById('roomCodeJoin').value.trim().toUpperCase();
-    const playerName = document.getElementById('playerName').value.trim();
+async function joinRoom() {
+    const playerName = elements.playerName.value.trim();
+    const roomCode = elements.roomCode.value.trim().toUpperCase();
     
     if (!playerName) {
-        showToast('Masukkan nama pemain terlebih dahulu!');
+        showNotification('Masukkan nama kamu dulu!', 'warning');
         return;
     }
     
     if (!roomCode || roomCode.length !== 6) {
-        showToast('Masukkan kode room yang valid (6 karakter)!');
+        showNotification('Kode room harus 6 karakter!', 'warning');
         return;
     }
     
-    const roomRef = database.ref('rooms/' + roomCode);
-    
-    roomRef.once('value').then((snapshot) => {
-        if (!snapshot.exists()) {
-            showToast('Room tidak ditemukan!');
+    try {
+        // Check if room exists
+        const roomSnapshot = await database.ref(`rooms/${roomCode}`).once('value');
+        if (!roomSnapshot.exists()) {
+            showNotification('Room tidak ditemukan!', 'error');
             return;
         }
         
-        const roomData = snapshot.val();
+        const roomData = roomSnapshot.val();
         
-        if (roomData.status === 'playing') {
-            showToast('Game sudah dimulai!');
+        // Check if room is full
+        const players = roomData.players || {};
+        if (Object.keys(players).length >= roomData.maxPlayers) {
+            showNotification('Room sudah penuh!', 'error');
             return;
         }
         
-        if (Object.keys(roomData.players).length >= 8) {
-            showToast('Room sudah penuh! (Maks 8 pemain)');
+        // Check if game already started
+        const gameSnapshot = await database.ref(`rooms/${roomCode}/game`).once('value');
+        const gameData = gameSnapshot.val();
+        if (gameData.status === 'playing') {
+            showNotification('Game sudah dimulai!', 'error');
             return;
         }
         
-        // Check if name already exists in room
-        const existingPlayer = Object.values(roomData.players).find(p => p.name === playerName);
-        if (existingPlayer) {
-            showToast('Nama sudah digunakan di room ini!');
-            return;
-        }
+        localPlayer.id = 'player_' + Date.now() + Math.random().toString(36).substr(2, 9);
+        localPlayer.name = playerName;
+        localPlayer.isHost = false;
+        localPlayer.playerNumber = 2;
+        
+        roomRef = database.ref(`rooms/${roomCode}`);
+        gameRef = database.ref(`rooms/${roomCode}/game`);
         
         // Add player to room
-        roomRef.child('players/' + currentPlayer.id).set({
+        await roomRef.child('players').child(localPlayer.id).set({
             name: playerName,
-            score: 0,
-            isCreator: false,
+            playerNumber: 2,
+            isHost: false,
             joinedAt: firebase.database.ServerValue.TIMESTAMP
-        }).then(() => {
-            currentPlayer.roomCode = roomCode;
-            currentPlayer.isCreator = false;
-            joinRoomSuccess(roomCode);
         });
-    });
-}
-
-// Successfully joined room
-function joinRoomSuccess(roomCode) {
-    currentPlayer.roomCode = roomCode;
-    showScreen('waiting');
-    updateWaitingRoom(roomCode);
-    
-    // Send chat message
-    sendChatMessage(`🎮 ${currentPlayer.name} bergabung ke room!`, true);
-}
-
-// Leave room
-function leaveRoom() {
-    if (currentPlayer.roomCode) {
-        const playerRef = database.ref(`rooms/${currentPlayer.roomCode}/players/${currentPlayer.id}`);
-        playerRef.remove();
         
-        // If creator leaves and no players left, delete room
-        if (currentPlayer.isCreator) {
-            const roomRef = database.ref(`rooms/${currentPlayer.roomCode}`);
-            roomRef.child('players').once('value').then((snapshot) => {
-                if (!snapshot.exists() || Object.keys(snapshot.val()).length === 0) {
-                    roomRef.remove();
-                }
+        // Add player to game
+        await gameRef.child('players').child(localPlayer.id).set({
+            name: playerName,
+            playerNumber: 2,
+            score: 0
+        });
+        
+        // Start game if we have 2 players
+        const playerCount = Object.keys(players).length + 1;
+        if (playerCount >= roomData.maxPlayers) {
+            await gameRef.update({
+                status: 'playing',
+                startTime: firebase.database.ServerValue.TIMESTAMP,
+                turnStartTime: firebase.database.ServerValue.TIMESTAMP
             });
         }
         
-        currentPlayer.roomCode = '';
-        currentPlayer.isCreator = false;
-        showScreen('lobby');
+        // Listen for changes
+        setupGameListeners();
+        
+        // Show game screen
+        showGameScreen(roomCode);
+        showNotification(`Berhasil masuk room ${roomCode}!`, 'success');
+        
+    } catch (error) {
+        console.error('Error joining room:', error);
+        showNotification('Gagal masuk room. Coba lagi.', 'error');
     }
 }
 
-// Update waiting room display
-function updateWaitingRoom(roomCode) {
-    document.getElementById('currentRoomCode').textContent = roomCode;
-    document.getElementById('roomCodeDisplay').textContent = roomCode;
+function showGameScreen(roomCode) {
+    elements.lobbyScreen.style.display = 'none';
+    elements.gameScreen.style.display = 'block';
+    elements.gameOverScreen.style.display = 'none';
     
-    const roomRef = database.ref(`rooms/${roomCode}`);
-    
-    // Listen for player changes
+    elements.currentRoomCode.textContent = roomCode;
+    elements.roomName.textContent = `${localPlayer.name}'s Game`;
+}
+
+function setupGameListeners() {
+    // Listen for room changes
     roomRef.child('players').on('value', (snapshot) => {
-        const players = snapshot.val() || {};
-        updatePlayersList(players);
-        
-        // Update player count
-        document.getElementById('playerCount').textContent = Object.keys(players).length;
-        
-        // Show/hide start button for creator
-        const startBtn = document.getElementById('startBtn');
-        const startSection = document.getElementById('startGameSection');
-        
-        if (currentPlayer.isCreator) {
-            startSection.classList.remove('hidden');
-            startBtn.disabled = Object.keys(players).length < 1;
-            startBtn.innerHTML = `<i class="fas fa-play"></i> Mulai Game (${Object.keys(players).length}/8)`;
-        } else {
-            startSection.classList.add('hidden');
-        }
+        updatePlayersList(snapshot.val());
     });
     
-    // Listen for game status changes
-    roomRef.child('status').on('value', (snapshot) => {
-        const status = snapshot.val();
-        if (status === 'playing') {
-            startGameForPlayers();
+    // Listen for game changes
+    gameRef.on('value', (snapshot) => {
+        const gameData = snapshot.val();
+        if (gameData) {
+            updateGameState(gameData);
         }
-    });
-    
-    // Listen for chat messages
-    roomRef.child('chat').on('child_added', (snapshot) => {
-        const message = snapshot.val();
-        addChatMessage(message.text, message.sender, message.isSystem);
     });
 }
 
-// Update players list
 function updatePlayersList(players) {
-    const playersList = document.getElementById('playersList');
-    playersList.innerHTML = '';
+    if (!players) return;
     
-    Object.entries(players).forEach(([playerId, player], index) => {
-        const playerCard = document.createElement('div');
-        playerCard.className = 'player-card';
-        if (player.isCreator) playerCard.classList.add('creator');
+    const playerList = Object.values(players);
+    playerList.sort((a, b) => a.playerNumber - b.playerNumber);
+    
+    // Update player 1
+    if (playerList[0]) {
+        elements.player1Name.textContent = playerList[0].name;
+        elements.player1Status.textContent = playerList[0].isHost ? 'Host' : 'Player 1';
+    }
+    
+    // Update player 2
+    if (playerList[1]) {
+        elements.player2Name.textContent = playerList[1].name;
+        elements.player2Status.textContent = playerList[1].isHost ? 'Host' : 'Player 2';
+    }
+}
+
+function updateGameState(gameData) {
+    gameState = gameData;
+    
+    // Update UI
+    updateCurrentWord();
+    updateUsedWords();
+    updateTurnIndicator();
+    updatePlayerCards();
+    
+    // Handle game status
+    if (gameData.status === 'playing') {
+        startTurnTimer();
+        enableInput();
+    } else if (gameData.status === 'finished') {
+        stopTurnTimer();
+        disableInput();
+        showGameOver();
+    }
+}
+
+function updateCurrentWord() {
+    if (gameState.currentWord) {
+        const lastLetter = getLastLetter(gameState.currentWord);
+        const restWord = gameState.currentWord.slice(1);
         
-        const firstLetter = player.name.charAt(0).toUpperCase();
-        
-        playerCard.innerHTML = `
-            <div class="player-avatar">${firstLetter}</div>
-            <div class="player-info">
-                <h4>${player.name} ${player.isCreator ? '👑' : ''}</h4>
-                <div class="player-status">Score: ${player.score || 0}</div>
-            </div>
+        elements.currentWord.innerHTML = `
+            <span class="start-letter">${gameState.currentWord.charAt(0)}</span>
+            <span class="rest-word">${restWord}</span>
         `;
         
-        playersList.appendChild(playerCard);
-    });
-}
-
-// Start game (creator only)
-function startGame() {
-    if (!currentPlayer.isCreator) return;
-    
-    const roomRef = database.ref(`rooms/${currentPlayer.roomCode}`);
-    
-    roomRef.update({
-        status: 'playing',
-        currentQuestion: 0,
-        startTime: firebase.database.ServerValue.TIMESTAMP
-    }).then(() => {
-        // Clear chat
-        roomRef.child('chat').remove();
-        
-        // Send system message
-        sendChatMessage('🚀 Game dimulai!', true);
-    });
-}
-
-// Start game for all players
-function startGameForPlayers() {
-    showScreen('game');
-    loadGameData();
-}
-
-// Load game data
-function loadGameData() {
-    const roomRef = database.ref(`rooms/${currentPlayer.roomCode}`);
-    
-    roomRef.on('value', (snapshot) => {
-        const roomData = snapshot.val();
-        if (!roomData) return;
-        
-        // Update game room code
-        document.getElementById('gameRoomCode').textContent = roomData.code;
-        
-        // Load question
-        if (roomData.currentQuestion !== undefined) {
-            const questionIndex = roomData.currentQuestion;
-            const questions = roomData.questions || getDefaultQuestions();
-            
-            if (questionIndex < questions.length) {
-                displayQuestion(questions[questionIndex], questionIndex);
-                
-                // Update question counter
-                document.getElementById('questionNumber').textContent = questionIndex + 1;
-            } else {
-                // Game finished
-                endGame();
-            }
-        }
-        
-        // Update scoreboard
-        updateScoreboard(roomData.players || {});
-        
-        // Start timer if not already running
-        if (roomData.timer !== undefined && !gameState.timerInterval) {
-            startTimer(roomData.timer);
-        }
-    });
-}
-
-// Display current question
-function displayQuestion(question, index) {
-    document.getElementById('questionText').textContent = question.text;
-    document.getElementById('questionHint').innerHTML = `<i class="fas fa-lightbulb"></i> ${question.hint}`;
-    
-    // Reset answer buttons
-    const answers = ['A', 'B', 'C', 'D'];
-    answers.forEach((letter, i) => {
-        const btn = document.getElementById(`answer${i + 1}`);
-        btn.className = 'answer-btn';
-        btn.innerHTML = `
-            <span class="answer-letter">${letter}</span>
-            <span class="answer-text">${question.options[i]}</span>
+        elements.lastLetter.innerHTML = `
+            Huruf selanjutnya: <strong>${lastLetter.toUpperCase()}</strong>
         `;
-        
-        // Update onclick with correct answer check
-        btn.onclick = function() {
-            submitAnswer(question.options[i]);
-        };
-    });
-    
-    // Reset answer status
-    document.getElementById('answerStatus').innerHTML = '<i class="fas fa-clock"></i> Pilih jawabanmu!';
-    gameState.hasAnswered = false;
+    }
 }
 
-// Submit answer
-function submitAnswer(selectedAnswer) {
-    if (gameState.hasAnswered) return;
+function updateUsedWords() {
+    elements.usedWordsList.innerHTML = '';
     
-    gameState.hasAnswered = true;
+    if (!gameState.usedWords || gameState.usedWords.length === 0) {
+        elements.usedWordsList.innerHTML = '<div class="empty-list">Belum ada kata yang dipakai</div>';
+        return;
+    }
     
-    const roomRef = database.ref(`rooms/${currentPlayer.roomCode}`);
-    
-    roomRef.child('questions').once('value').then((snapshot) => {
-        const questions = snapshot.val() || getDefaultQuestions();
-        const currentQIndex = gameState.currentQuestionIndex;
-        const question = questions[currentQIndex];
+    gameState.usedWords.forEach((word, index) => {
+        const wordElement = document.createElement('div');
+        wordElement.className = 'word-tag';
         
-        const isCorrect = selectedAnswer === question.correctAnswer;
-        
-        // Highlight correct/wrong answers
-        highlightAnswers(question.correctAnswer, selectedAnswer);
-        
-        // Update player score
-        if (isCorrect) {
-            const timeLeft = parseInt(document.getElementById('timer').textContent);
-            const points = 10 + Math.floor(timeLeft / 3); // Bonus points for faster answers
-            
-            roomRef.child(`players/${currentPlayer.id}/score`).transaction((currentScore) => {
-                return (currentScore || 0) + points;
-            });
-            
-            document.getElementById('answerStatus').innerHTML = 
-                `<i class="fas fa-check-circle" style="color:#4CAF50"></i> Benar! +${points} poin`;
+        // Determine which player submitted this word
+        if (index === 0) {
+            wordElement.classList.add('player1');
         } else {
-            document.getElementById('answerStatus').innerHTML = 
-                `<i class="fas fa-times-circle" style="color:#f44336"></i> Salah! Jawaban benar: ${question.correctAnswer}`;
+            wordElement.classList.add(index % 2 === 0 ? 'player1' : 'player2');
         }
         
-        // Send chat message about answer
-        sendChatMessage(
-            `🎯 ${currentPlayer.name} ${isCorrect ? 'menjawab benar' : 'salah menjawab'}!`,
-            true
-        );
+        wordElement.textContent = word;
+        elements.usedWordsList.appendChild(wordElement);
     });
 }
 
-// Highlight correct and wrong answers
-function highlightAnswers(correctAnswer, selectedAnswer) {
-    const answers = document.querySelectorAll('.answer-btn');
-    
-    answers.forEach(btn => {
-        const answerText = btn.querySelector('.answer-text').textContent;
-        
-        if (answerText === correctAnswer) {
-            btn.classList.add('correct');
-        } else if (answerText === selectedAnswer && selectedAnswer !== correctAnswer) {
-            btn.classList.add('wrong');
+function updateTurnIndicator() {
+    if (gameState.status === 'waiting') {
+        elements.turnIndicator.innerHTML = '<i class="fas fa-user-clock"></i><span>Menunggu lawan...</span>';
+        elements.turnIndicator.className = 'turn-indicator';
+        elements.timerLabel.textContent = 'Menunggu...';
+    } else if (gameState.status === 'playing') {
+        if (gameState.currentPlayer === localPlayer.id) {
+            elements.turnIndicator.innerHTML = '<i class="fas fa-user-check"></i><span>Giliran KAMU!</span>';
+            elements.turnIndicator.className = 'turn-indicator your-turn';
+            elements.timerLabel.textContent = 'Giliran kamu';
+        } else {
+            elements.turnIndicator.innerHTML = '<i class="fas fa-user-clock"></i><span>Giliran LAWAN</span>';
+            elements.turnIndicator.className = 'turn-indicator opponent-turn';
+            elements.timerLabel.textContent = 'Giliran lawan';
         }
-        
-        btn.classList.add('disabled');
-    });
+    }
 }
 
-// Start timer
-function startTimer(initialTime) {
-    clearInterval(gameState.timerInterval);
-    gameState.timer = initialTime || 30;
+function updatePlayerCards() {
+    // Reset all cards
+    elements.player1Card.classList.remove('active', 'winner');
+    elements.player2Card.classList.remove('active', 'winner');
     
-    const timerElement = document.getElementById('timer');
-    timerElement.textContent = gameState.timer;
+    // Highlight active player
+    if (gameState.currentPlayer && gameState.players[gameState.currentPlayer]) {
+        const activePlayer = gameState.players[gameState.currentPlayer];
+        if (activePlayer.playerNumber === 1) {
+            elements.player1Card.classList.add('active');
+        } else {
+            elements.player2Card.classList.add('active');
+        }
+    }
     
-    gameState.timerInterval = setInterval(() => {
-        gameState.timer--;
-        timerElement.textContent = gameState.timer;
+    // Highlight winner
+    if (gameState.winner && gameState.players[gameState.winner]) {
+        const winner = gameState.players[gameState.winner];
+        if (winner.playerNumber === 1) {
+            elements.player1Card.classList.add('winner');
+        } else {
+            elements.player2Card.classList.add('winner');
+        }
+    }
+}
+
+// ==================== TIMER FUNCTIONS ====================
+function startTurnTimer() {
+    stopTurnTimer();
+    
+    if (gameState.currentPlayer !== localPlayer.id) {
+        // Not our turn, just show opponent's timer
+        updateTimerDisplay(GAME_CONFIG.TURN_TIME);
+        return;
+    }
+    
+    let timeLeft = GAME_CONFIG.TURN_TIME;
+    updateTimerDisplay(timeLeft);
+    
+    turnTimer = setInterval(() => {
+        timeLeft--;
+        updateTimerDisplay(timeLeft);
         
-        if (gameState.timer <= 0) {
-            clearInterval(gameState.timerInterval);
-            
-            // Move to next question
-            setTimeout(() => {
-                nextQuestion();
-            }, 2000);
+        if (timeLeft <= 0) {
+            // Time's up!
+            handleTimeout();
+            clearInterval(turnTimer);
         }
     }, 1000);
 }
 
-// Move to next question
-function nextQuestion() {
-    const roomRef = database.ref(`rooms/${currentPlayer.roomCode}`);
-    
-    roomRef.child('currentQuestion').transaction((current) => {
-        return (current || 0) + 1;
-    });
-    
-    // Reset timer
-    roomRef.child('timer').set(30);
+function stopTurnTimer() {
+    if (turnTimer) {
+        clearInterval(turnTimer);
+        turnTimer = null;
+    }
 }
 
-// Update scoreboard
-function updateScoreboard(players) {
-    const scoreboard = document.getElementById('scoreboardList');
-    scoreboard.innerHTML = '';
+function updateTimerDisplay(seconds) {
+    const percentage = (seconds / GAME_CONFIG.TURN_TIME) * 100;
+    elements.timerFill.style.background = `conic-gradient(var(--primary) ${percentage}%, transparent 0%)`;
+    elements.timerText.textContent = seconds;
     
-    // Convert players object to array and sort by score
-    const playersArray = Object.entries(players)
-        .map(([id, data]) => ({ id, ...data }))
-        .sort((a, b) => (b.score || 0) - (a.score || 0));
-    
-    playersArray.forEach((player, index) => {
-        const scoreItem = document.createElement('div');
-        scoreItem.className = 'score-item';
-        
-        if (player.id === currentPlayer.id) {
-            scoreItem.style.background = '#f0f7ff';
-        }
-        
-        scoreItem.innerHTML = `
-            <div class="score-player">
-                <div class="score-rank">${index + 1}</div>
-                <div>
-                    <div class="score-name">${player.name} ${player.id === currentPlayer.id ? '(Kamu)' : ''}</div>
-                    <div class="score-time">${player.isCreator ? '👑 Creator' : 'Pemain'}</div>
-                </div>
-            </div>
-            <div class="score-value">${player.score || 0} poin</div>
-        `;
-        
-        scoreboard.appendChild(scoreItem);
-    });
+    // Change color when time is running out
+    if (seconds <= 5) {
+        elements.timerFill.style.background = `conic-gradient(var(--danger) ${percentage}%, transparent 0%)`;
+    }
 }
 
-// End game
-function endGame() {
-    clearInterval(gameState.timerInterval);
-    showScreen('result');
-    
-    const roomRef = database.ref(`rooms/${currentPlayer.roomCode}`);
-    
-    roomRef.once('value').then((snapshot) => {
-        const roomData = snapshot.val();
-        if (!roomData) return;
-        
-        // Display final results
-        displayFinalResults(roomData.players || {});
-        
-        // Update game stats
-        updateGameStats(roomData);
-    });
+function handleTimeout() {
+    if (gameState.currentPlayer === localPlayer.id) {
+        showNotification('⏰ Waktu habis! Kamu kalah.', 'error');
+        endGame('timeout');
+    }
 }
 
-// Display final results
-function displayFinalResults(players) {
-    const rankings = document.getElementById('finalRankings');
-    rankings.innerHTML = '';
+// ==================== GAME INPUT ====================
+function enableInput() {
+    if (gameState.currentPlayer === localPlayer.id && gameState.status === 'playing') {
+        elements.wordInput.disabled = false;
+        elements.submitWordBtn.disabled = false;
+        elements.wordInput.focus();
+    } else {
+        disableInput();
+    }
+}
+
+function disableInput() {
+    elements.wordInput.disabled = true;
+    elements.submitWordBtn.disabled = true;
+}
+
+async function submitWord() {
+    const word = elements.wordInput.value.trim();
     
-    document.getElementById('resultRoomCode').textContent = currentPlayer.roomCode;
+    if (!word) {
+        showNotification('Masukkan kata dulu!', 'warning');
+        return;
+    }
     
-    // Convert players to array and sort
-    const playersArray = Object.entries(players)
-        .map(([id, data]) => ({ id, ...data }))
-        .sort((a, b) => (b.score || 0) - (a.score || 0));
+    const lastLetter = getLastLetter(gameState.currentWord);
     
-    playersArray.forEach((player, index) => {
-        const rankingItem = document.createElement('div');
-        rankingItem.className = 'ranking-item';
-        if (index === 0) rankingItem.classList.add('winner');
+    if (!isValidWord(word, lastLetter)) {
+        showNotification('Kata tidak valid! Periksa huruf awal dan pastikan kata belum dipakai.', 'error');
+        elements.wordInput.value = '';
+        elements.wordInput.focus();
+        return;
+    }
+    
+    try {
+        // Update game state
+        const newUsedWords = [...gameState.usedWords, word];
+        const nextPlayer = getNextPlayer();
         
-        const firstLetter = player.name.charAt(0).toUpperCase();
+        await gameRef.update({
+            currentWord: word,
+            usedWords: newUsedWords,
+            currentPlayer: nextPlayer,
+            turnStartTime: firebase.database.ServerValue.TIMESTAMP,
+            [`players.${localPlayer.id}.score`]: (gameState.players[localPlayer.id]?.score || 0) + 1
+        });
         
-        rankingItem.innerHTML = `
-            <div class="ranking-rank">#${index + 1}</div>
-            <div class="ranking-avatar">${firstLetter}</div>
-            <div class="ranking-info">
-                <div class="ranking-name">${player.name} ${player.id === currentPlayer.id ? '(Kamu)' : ''}</div>
-                <div class="ranking-score">${player.score || 0} poin</div>
-            </div>
-        `;
+        // Reset input
+        elements.wordInput.value = '';
         
-        rankings.appendChild(rankingItem);
-    });
+        // Check if word is a "killer" word (ends with uncommon letter)
+        checkForGameEnd(word);
+        
+    } catch (error) {
+        console.error('Error submitting word:', error);
+        showNotification('Gagal mengirim kata. Coba lagi.', 'error');
+    }
+}
+
+function getNextPlayer() {
+    const playerIds = Object.keys(gameState.players);
+    const currentIndex = playerIds.indexOf(gameState.currentPlayer);
+    const nextIndex = (currentIndex + 1) % playerIds.length;
+    return playerIds[nextIndex];
+}
+
+function checkForGameEnd(word) {
+    const lastLetter = getLastLetter(word);
+    const wordsStartingWithLetter = GAME_CONFIG.WORD_LIST.filter(w => 
+        w.toLowerCase().startsWith(lastLetter)
+    );
+    
+    const unusedWords = wordsStartingWithLetter.filter(w => 
+        !gameState.usedWords.some(used => used.toLowerCase() === w.toLowerCase())
+    );
+    
+    if (unusedWords.length === 0) {
+        // No more words starting with this letter
+        setTimeout(() => {
+            endGame('no_more_words');
+        }, 1000);
+    }
+}
+
+async function endGame(reason) {
+    let winner = null;
+    let message = '';
+    
+    if (reason === 'timeout') {
+        winner = getNextPlayer(); // Player who didn't timeout wins
+        message = `${gameState.players[winner]?.name} menang karena lawan timeout!`;
+    } else if (reason === 'no_more_words') {
+        winner = gameState.currentPlayer; // Current player loses
+        message = `${gameState.players[getNextPlayer()]?.name} menang karena lawan tidak bisa melanjutkan!`;
+    } else {
+        // Default: player with most points wins
+        const players = Object.entries(gameState.players);
+        players.sort((a, b) => b[1].score - a[1].score);
+        winner = players[0][0];
+        message = `${gameState.players[winner]?.name} menang dengan skor tertinggi!`;
+    }
+    
+    try {
+        await gameRef.update({
+            status: 'finished',
+            winner: winner,
+            endTime: firebase.database.ServerValue.TIMESTAMP
+        });
+    } catch (error) {
+        console.error('Error ending game:', error);
+    }
+}
+
+function showGameOver() {
+    elements.gameScreen.style.display = 'none';
+    elements.gameOverScreen.style.display = 'block';
+    
+    // Update result display
+    if (gameState.winner === localPlayer.id) {
+        elements.resultIcon.className = 'result-icon win';
+        elements.resultIcon.innerHTML = '<i class="fas fa-trophy"></i>';
+        elements.resultTitle.textContent = 'KAMU MENANG!';
+        elements.resultMessage.textContent = 'Selamat! Kamu memenangkan permainan.';
+    } else {
+        elements.resultIcon.className = 'result-icon lose';
+        elements.resultIcon.innerHTML = '<i class="fas fa-heart-broken"></i>';
+        elements.resultTitle.textContent = 'KAMU KALAH';
+        elements.resultMessage.textContent = 'Coba lagi di game berikutnya!';
+    }
     
     // Update stats
-    document.getElementById('totalPlayers').textContent = playersArray.length;
-    document.getElementById('totalQuestions').textContent = '5'; // Default 5 questions
-    document.getElementById('highestScore').textContent = playersArray[0]?.score || 0;
+    elements.totalWords.textContent = gameState.usedWords?.length || 0;
+    
+    const duration = gameState.endTime && gameState.startTime 
+        ? Math.round((gameState.endTime - gameState.startTime) / 1000)
+        : 0;
+    elements.gameDuration.textContent = `${duration}s`;
+    
+    elements.winnerName.textContent = gameState.players[gameState.winner]?.name || '-';
+    
+    // Show final words
+    elements.finalWordsList.innerHTML = '';
+    if (gameState.usedWords) {
+        gameState.usedWords.forEach(word => {
+            const wordElement = document.createElement('div');
+            wordElement.className = 'word-tag';
+            wordElement.textContent = word;
+            elements.finalWordsList.appendChild(wordElement);
+        });
+    }
 }
 
-// Update game statistics
-function updateGameStats(roomData) {
-    // You can add more detailed stats here
+// ==================== EVENT LISTENERS ====================
+function setupEventListeners() {
+    // Lobby buttons
+    elements.createRoomBtn.addEventListener('click', createRoom);
+    elements.joinRoomBtn.addEventListener('click', () => {
+        elements.roomJoinSection.style.display = 'block';
+        elements.roomCode.focus();
+    });
+    elements.confirmJoinBtn.addEventListener('click', joinRoom);
+    
+    // Game buttons
+    elements.leaveRoomBtn.addEventListener('click', leaveRoom);
+    elements.submitWordBtn.addEventListener('click', submitWord);
+    elements.rematchBtn.addEventListener('click', startRematch);
+    elements.copyRoomBtn.addEventListener('click', copyRoomLink);
+    elements.playAgainBtn.addEventListener('click', startRematch);
+    elements.newRoomBtn.addEventListener('click', goToLobby);
+    
+    // Word input
+    elements.wordInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            submitWord();
+        }
+    });
+    
+    // Enter key in lobby
+    elements.playerName.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            elements.createRoomBtn.click();
+        }
+    });
+    
+    elements.roomCode.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            elements.confirmJoinBtn.click();
+        }
+    });
 }
 
-// Back to lobby
-function backToLobby() {
-    leaveRoom();
-    showScreen('lobby');
+async function leaveRoom() {
+    if (roomRef) {
+        try {
+            // Remove player from room
+            if (localPlayer.id) {
+                await roomRef.child('players').child(localPlayer.id).remove();
+                
+                // If host leaves, delete the room
+                if (localPlayer.isHost) {
+                    await roomRef.remove();
+                }
+            }
+        } catch (error) {
+            console.error('Error leaving room:', error);
+        }
+    }
+    
+    // Reset state
+    resetGameState();
+    
+    // Show lobby
+    elements.gameScreen.style.display = 'none';
+    elements.gameOverScreen.style.display = 'none';
+    elements.lobbyScreen.style.display = 'block';
+    
+    showNotification('Keluar dari room', 'info');
 }
 
-// Play again
-function playAgain() {
-    if (currentPlayer.isCreator) {
-        const roomRef = database.ref(`rooms/${currentPlayer.roomCode}`);
+async function startRematch() {
+    if (!roomRef) return;
+    
+    try {
+        const initialWord = getRandomWord();
+        await gameRef.update({
+            currentPlayer: localPlayer.isHost ? localPlayer.id : getNextPlayer(),
+            currentWord: initialWord,
+            usedWords: [initialWord],
+            status: 'playing',
+            winner: null,
+            startTime: firebase.database.ServerValue.TIMESTAMP,
+            turnStartTime: firebase.database.ServerValue.TIMESTAMP
+        });
         
-        // Reset game state
-        roomRef.update({
-            status: 'waiting',
-            currentQuestion: 0,
-            timer: 30
-        }).then(() => {
-            // Reset player scores
-            const updates = {};
-            Object.keys(roomData.players || {}).forEach(playerId => {
-                updates[`players/${playerId}/score`] = 0;
-            });
-            
-            roomRef.update(updates).then(() => {
-                showScreen('waiting');
-                sendChatMessage('🔄 Game direset!', true);
-            });
-        });
-    } else {
-        showToast('Hanya pembuat room yang bisa mereset game!');
+        // Reset player scores
+        const players = gameState.players;
+        for (const playerId in players) {
+            await gameRef.child(`players.${playerId}.score`).set(0);
+        }
+        
+        showGameScreen(elements.currentRoomCode.textContent);
+        showNotification('Game baru dimulai!', 'success');
+        
+    } catch (error) {
+        console.error('Error starting rematch:', error);
+        showNotification('Gagal memulai game baru', 'error');
     }
 }
 
-// Share results
-function shareResults() {
-    const roomCode = currentPlayer.roomCode;
-    const text = `Saya baru saja bermain game tebak-tebakan di room ${roomCode}!`;
+function copyRoomLink() {
+    const roomCode = elements.currentRoomCode.textContent;
+    const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
     
-    if (navigator.share) {
-        navigator.share({
-            title: 'Hasil Game Tebak-Tebakan',
-            text: text,
-            url: window.location.href
-        });
-    } else {
-        navigator.clipboard.writeText(text).then(() => {
-            showToast('Hasil disalin ke clipboard!');
-        });
-    }
+    navigator.clipboard.writeText(url).then(() => {
+        showNotification('Link room disalin!', 'success');
+    }).catch(() => {
+        showNotification('Gagal menyalin link', 'error');
+    });
 }
 
-// Chat Functions
-function sendChatMessage(text, isSystem = false) {
-    if (!currentPlayer.roomCode) return;
-    
-    const message = {
-        text: text,
-        sender: isSystem ? 'System' : currentPlayer.name,
-        isSystem: isSystem,
-        timestamp: firebase.database.ServerValue.TIMESTAMP
+function goToLobby() {
+    elements.gameOverScreen.style.display = 'none';
+    elements.lobbyScreen.style.display = 'block';
+    resetGameState();
+}
+
+function resetGameState() {
+    gameState = {
+        currentPlayer: null,
+        currentWord: null,
+        usedWords: [],
+        players: {},
+        gameStatus: 'waiting',
+        winner: null,
+        startTime: null,
+        turnStartTime: null
     };
     
-    const chatRef = database.ref(`rooms/${currentPlayer.roomCode}/chat`);
-    chatRef.push(message);
-}
-
-function addChatMessage(text, sender, isSystem) {
-    const chatMessages = document.getElementById('chatMessages');
+    localPlayer = {
+        id: null,
+        name: '',
+        isHost: false,
+        playerNumber: null
+    };
     
-    const messageDiv = document.createElement('div');
-    messageDiv.className = isSystem ? 'system-msg' : 'chat-message';
-    
-    if (isSystem) {
-        messageDiv.innerHTML = `<i class="fas fa-info-circle"></i> ${text}`;
-    } else {
-        messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+    if (roomRef) {
+        roomRef.off();
+        gameRef.off();
+        roomRef = null;
+        gameRef = null;
     }
     
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    stopTurnTimer();
 }
 
-function handleChatKey(event) {
-    if (event.key === 'Enter') {
-        sendChatMessage();
-        event.preventDefault();
-    }
-}
-
-function sendChatMessage() {
-    const input = document.getElementById('chatInput');
-    const message = input.value.trim();
-    
-    if (message && currentPlayer.roomCode) {
-        sendChatMessage(message, false);
-        input.value = '';
-    }
-}
-
-// Copy room code
-function copyRoomCode() {
-    const roomCode = document.getElementById('roomCodeDisplay').textContent;
-    navigator.clipboard.writeText(roomCode).then(() => {
-        showToast('Kode room disalin!');
-    });
-}
-
-// Show screen
-function showScreen(screenName) {
-    Object.values(screens).forEach(screen => {
-        screen.classList.remove('active');
-    });
-    
-    if (screens[screenName]) {
-        screens[screenName].classList.add('active');
-    }
-    
-    gameState.currentScreen = screenName;
-}
-
-// Show toast notification
-function showToast(message) {
-    const toast = document.getElementById('toast');
-    const toastMessage = document.getElementById('toastMessage');
-    
-    toastMessage.textContent = message;
-    toast.classList.remove('hidden');
+// ==================== UTILITY FUNCTIONS ====================
+function showNotification(message, type = 'info') {
+    elements.notification.textContent = message;
+    elements.notification.className = `notification ${type}`;
+    elements.notification.style.display = 'block';
     
     setTimeout(() => {
-        toast.classList.add('hidden');
+        elements.notification.style.display = 'none';
     }, 3000);
 }
 
-// Update global player count
-function updateGlobalPlayerCount() {
-    const countRef = database.ref('global/playerCount');
+// ==================== INITIALIZATION ====================
+document.addEventListener('DOMContentLoaded', () => {
+    initializeFirebase();
+    setupEventListeners();
     
-    // Increment count when player joins
-    countRef.transaction((current) => {
-        return (current || 0) + 1;
-    });
-    
-    // Update display
-    countRef.on('value', (snapshot) => {
-        const count = snapshot.val() || 0;
-        document.getElementById('globalPlayerCount').textContent = `${count} pemain online`;
-    });
-}
-
-// Setup Firebase listeners
-function setupFirebaseListeners() {
-    // Clean up old rooms periodically
-    const roomsRef = database.ref('rooms');
-    roomsRef.on('value', (snapshot) => {
-        const rooms = snapshot.val() || {};
-        const now = Date.now();
-        
-        Object.entries(rooms).forEach(([code, room]) => {
-            // Delete rooms older than 24 hours
-            if (room.createdAt && (now - room.createdAt) > 24 * 60 * 60 * 1000) {
-                roomsRef.child(code).remove();
-            }
-        });
-    });
-}
-
-// Get default questions
-function getDefaultQuestions() {
-    return [
-        {
-            text: "Ibukota Indonesia adalah?",
-            options: ["Jakarta", "Bandung", "Surabaya", "Medan"],
-            correctAnswer: "Jakarta",
-            hint: "Kota terbesar di Indonesia"
-        },
-        {
-            text: "Planet terdekat dari Matahari adalah?",
-            options: ["Venus", "Mars", "Merkurius", "Bumi"],
-            correctAnswer: "Merkurius",
-            hint: "Planet terkecil di tata surya"
-        },
-        {
-            text: "Warna campuran merah dan biru adalah?",
-            options: ["Hijau", "Ungu", "Kuning", "Oranye"],
-            correctAnswer: "Ungu",
-            hint: "Warna kerajaan"
-        },
-        {
-            text: "Berapa jumlah sisi pada segi enam?",
-            options: ["4", "5", "6", "8"],
-            correctAnswer: "6",
-            hint: "Heksagon"
-        },
-        {
-            text: "Hewan yang dikenal sebagai raja hutan adalah?",
-            options: ["Harimau", "Singa", "Gajah", "Serigala"],
-            correctAnswer: "Singa",
-            hint: "Berasal dari Afrika"
-        }
-    ];
-}
-
-// Initialize when page loads
-document.addEventListener('DOMContentLoaded', initGame);
+    // Check for room code in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomCode = urlParams.get('room');
+    if (roomCode) {
+        elements.roomCode.value = roomCode;
+        elements.roomJoinSection.style.display = 'block';
+        showNotification(`Room ${roomCode} terdeteksi. Masukkan nama dan klik Gabung.`, 'info');
+    }
+});
